@@ -1,0 +1,6 @@
+.chrome-profile/
+.pyppeteer-profile/
+__pycache__/
+node_modules/
+.env
+*.log
