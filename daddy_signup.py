@@ -6,8 +6,10 @@ from pathlib import Path
 
 from pyppeteer import connect
 
-EMAIL = "metfone066666655@gmail.com"
-USERNAME = "Hour066666655"
+from daddy_openmail import get_verification_code
+
+EMAIL = "sohengheath@gmail.com"
+USERNAME = "soheng066666655"
 PASSWORD = "Hourlay007"
 SIGNUP_URL = "https://sso.godaddy.com/account/create?prefillEmail=true"
 EMAIL_SELECTORS = [
@@ -76,15 +78,22 @@ async def fill_field(page, selectors: list[str], value: str) -> str:
 
 
 async def click_create_account(page) -> None:
-    submit_xpath = (
-        "//button[contains(translate(normalize-space(.), "
-        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'create account')]"
-        "|//input[@type='submit']"
-        "|//*[@role='button' and contains(translate(normalize-space(.), "
-        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'create account')]"
+    # Use JavaScript to find and click the Create Account button directly
+    clicked = await page.evaluate(
+        """() => {
+            const buttons = document.querySelectorAll('button');
+            for (const btn of buttons) {
+                const text = btn.textContent.trim().toLowerCase();
+                if (text === 'create account') {
+                    btn.click();
+                    return true;
+                }
+            }
+            return false;
+        }"""
     )
-    button = await page.waitForXPath(submit_xpath, {"timeout": 30000})
-    await button.click()
+    if not clicked:
+        raise RuntimeError("Could not find 'Create Account' button")
 
 
 async def click_send_verification_code(page) -> None:
@@ -131,11 +140,72 @@ async def sign_up() -> None:
         await fill_field(page, USERNAME_SELECTORS, USERNAME)
         await asyncio.sleep(2)
         await fill_field(page, PASSWORD_SELECTORS, PASSWORD)
+        await asyncio.sleep(2)
+
+        # Click "Agree" button
+        print("Clicking Agree button...")
+        await page.evaluate(
+            """() => {
+                const buttons = document.querySelectorAll('button');
+                for (const btn of buttons) {
+                    const text = btn.textContent.trim().toLowerCase();
+                    if (text.includes('agree')) {
+                        btn.click();
+                        return;
+                    }
+                }
+            }"""
+        )
+        print("Agree clicked!")
+        await asyncio.sleep(2)
+
+        # Scroll down to make sure "Create Account" button is visible
+        await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
         await asyncio.sleep(1)
         await click_create_account(page)
-        await asyncio.sleep(1)
+        print("Create Account clicked! Waiting for verification page...")
+        await asyncio.sleep(5)
         await click_send_verification_code(page)
-        print("GoDaddy signup page opened, Create Account was submitted, and Send Verification Code was clicked. Press Ctrl+C to stop the script.")
+        print("Send Verification Code clicked!")
+        await asyncio.sleep(5)
+
+        # Get the 6-digit code from Gmail
+        print("Opening Gmail to get verification code...")
+        code = await get_verification_code()
+        print(f"Got verification code: {code}")
+
+        # Enter the code on the GoDaddy signup page
+        await page.bringToFront()
+        await asyncio.sleep(2)
+
+        print(f"Entering verification code: {code}")
+        verification_selectors = [
+            'input[name="code"]',
+            'input[name="verificationCode"]',
+            'input[id="code"]',
+            'input[type="text"]',
+            'input[type="number"]',
+        ]
+        code_selector = await wait_for_first_selector(page, verification_selectors, timeout=30000)
+        await page.focus(code_selector)
+        await page.type(code_selector, code)
+        print("Verification code entered.")
+
+        await asyncio.sleep(2)
+
+        # Click "Verify Code" button
+        print("Clicking Verify Code button...")
+        verify_xpath = (
+            "//button[contains(translate(normalize-space(.), "
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'verify code')]"
+            "|//input[@type='submit' and contains(translate(@value, "
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'verify code')]"
+            "|//*[@role='button' and contains(translate(normalize-space(.), "
+            "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'verify code')]"
+        )
+        verify_button = await page.waitForXPath(verify_xpath, {"timeout": 30000})
+        await verify_button.click()
+        print("Verify Code clicked! Signup verification complete.")
 
         while True:
             await asyncio.sleep(3600)

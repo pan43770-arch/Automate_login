@@ -8,8 +8,8 @@ from pyppeteer import connect
 
 from read_inbox import read_godaddy_code
 
-EMAIL = "metfone066666655@gmail.com"
-PASSWORD = "No97@st26"
+EMAIL = "sohengheath@gmail.com"
+PASSWORD = "Ying@salon"
 LOGIN_URL = "https://mail.google.com/"
 PASSWORD_URL = "https://accounts.google.com/v3/signin/challenge/pwd"
 EMAIL_SELECTORS = [
@@ -108,9 +108,13 @@ async def click_next(page) -> None:
     await button.click()
 
 
-async def open_mail() -> None:
+async def get_verification_code() -> str:
+    """
+    Opens Gmail, logs in, finds the latest GoDaddy verification email,
+    and returns the 6-digit code.
+    """
     project_dir = Path(__file__).resolve().parent
-    profile_dir = project_dir / ".chrome-profile"
+    profile_dir = project_dir / ".chrome-profile-mail"
     chrome_path = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
     debug_port = 9224
     profile_dir.mkdir(exist_ok=True)
@@ -149,16 +153,12 @@ async def open_mail() -> None:
         await fill_field(page, PASSWORD_SELECTORS, PASSWORD)
         await asyncio.sleep(2)
         await click_next(page)
-        print("Login successful. Now reading GoDaddy verification email...")
+        print("Gmail login successful. Now reading GoDaddy verification email...")
         await asyncio.sleep(5)
 
         code = await read_godaddy_code(page)
         print(f"Your GoDaddy 6-digit code is: {code}")
-
-        while True:
-            await asyncio.sleep(3600)
-    except KeyboardInterrupt:
-        pass
+        return code
     finally:
         try:
             if browser is not None:
@@ -168,4 +168,5 @@ async def open_mail() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(open_mail())
+    code = asyncio.run(get_verification_code())
+    print(f"Code: {code}")
