@@ -6,9 +6,11 @@ from pathlib import Path
 
 from pyppeteer import connect
 
+from read_inbox import read_godaddy_code
+
 EMAIL = "metfone066666655@gmail.com"
 PASSWORD = "No97@st26"
-LOGIN_URL = "https://accounts.google.com/"
+LOGIN_URL = "https://mail.google.com/"
 PASSWORD_URL = "https://accounts.google.com/v3/signin/challenge/pwd"
 EMAIL_SELECTORS = [
     'input[type="email"]',
@@ -147,7 +149,11 @@ async def open_mail() -> None:
         await fill_field(page, PASSWORD_SELECTORS, PASSWORD)
         await asyncio.sleep(2)
         await click_next(page)
-        print("Google login page opened and credentials were submitted. Press Ctrl+C to stop the script.")
+        print("Login successful. Now reading GoDaddy verification email...")
+        await asyncio.sleep(5)
+
+        code = await read_godaddy_code(page)
+        print(f"Your GoDaddy 6-digit code is: {code}")
 
         while True:
             await asyncio.sleep(3600)
