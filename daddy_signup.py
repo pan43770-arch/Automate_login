@@ -112,7 +112,7 @@ async def click_send_verification_code(page) -> None:
 async def sign_up() -> None:
     project_dir = Path(__file__).resolve().parent
     profile_dir = project_dir / ".chrome-profile"
-    chrome_path = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+    chrome_path = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
     debug_port = 9223
     profile_dir.mkdir(exist_ok=True)
     browser = None
