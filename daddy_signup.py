@@ -8,8 +8,8 @@ from pyppeteer import connect
 
 from daddy_openmail import get_verification_code
 
-EMAIL = "sohengheath@gmail.com"
-USERNAME = "soheng066666655"
+EMAIL = "h.hak123456@protonmail.com"
+USERNAME = "h.hak066666655"
 PASSWORD = "Hourlay007"
 SIGNUP_URL = "https://sso.godaddy.com/account/create?prefillEmail=true"
 EMAIL_SELECTORS = [
@@ -124,6 +124,7 @@ async def sign_up() -> None:
             f"--user-data-dir={profile_dir}",
             "--no-first-run",
             "--no-default-browser-check",
+            "--incognito",
             "about:blank",
         ]
     )
