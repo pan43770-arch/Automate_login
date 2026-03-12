@@ -8,8 +8,8 @@ from pyppeteer import connect
 
 from daddy_openmail import get_verification_code
 
-EMAIL = "sohengheath@gmail.com"
-USERNAME = "soheng066666655"
+EMAIL = "h.hak123456@protonmail.com"
+USERNAME = "h.hak066666655"
 PASSWORD = "Hourlay007"
 SIGNUP_URL = "https://sso.godaddy.com/account/create?prefillEmail=true"
 EMAIL_SELECTORS = [
@@ -112,7 +112,7 @@ async def click_send_verification_code(page) -> None:
 async def sign_up() -> None:
     project_dir = Path(__file__).resolve().parent
     profile_dir = project_dir / ".chrome-profile"
-    chrome_path = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+    chrome_path = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
     debug_port = 9223
     profile_dir.mkdir(exist_ok=True)
     browser = None
@@ -124,6 +124,7 @@ async def sign_up() -> None:
             f"--user-data-dir={profile_dir}",
             "--no-first-run",
             "--no-default-browser-check",
+            "--incognito",
             "about:blank",
         ]
     )
