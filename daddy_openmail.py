@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pyppeteer import connect
 
-from read_inbox import read_godaddy_code
+from read_inbox import read_godaddy_code, read_verification_code
 
 EMAIL = "sohengheath@gmail.com"
 PASSWORD = "Ying@salon"
@@ -44,10 +44,13 @@ async def wait_for_first_selector(page, selectors: list[str], timeout: int = 300
 
     while time.time() < deadline:
         for selector in selectors:
-            handle = await page.querySelector(selector)
-            if handle is not None:
-                return selector
-        await asyncio.sleep(0.25)
+            try:
+                handle = await page.querySelector(selector)
+                if handle is not None:
+                    return selector
+            except Exception:
+                pass
+        await asyncio.sleep(0.5)
 
     raise TimeoutError(f"No matching selector found: {selectors}")
 
@@ -137,17 +140,26 @@ async def get_verification_code() -> str:
         page = await browser.newPage()
         page.setDefaultNavigationTimeout(90000)
         await page.setViewport({"width": 1280, "height": 800})
-        await page.goto(LOGIN_URL, {"waitUntil": "domcontentloaded"})
+        await page.goto(LOGIN_URL, {"waitUntil": "networkidle0"})
+        await asyncio.sleep(3)
+        await wait_for_first_selector(page, EMAIL_SELECTORS, timeout=60000)
+        await asyncio.sleep(2)
         await fill_field(page, EMAIL_SELECTORS, EMAIL)
         await asyncio.sleep(2)
 
         await click_next(page)
 
-        while not page.url.startswith(PASSWORD_URL):
-            await asyncio.sleep(0.2)
+        for _ in range(120):
+            try:
+                if page.url.startswith(PASSWORD_URL):
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
 
         print(page.url)
-        await page.waitForSelector('input[type="password"]')
+        await asyncio.sleep(3)
+        await page.waitForSelector('input[type="password"]', {"timeout": 60000})
         await asyncio.sleep(2)
         await wait_for_visible_selector(page, PASSWORD_SELECTORS, timeout=60000)
         await fill_field(page, PASSWORD_SELECTORS, PASSWORD)
@@ -158,6 +170,84 @@ async def get_verification_code() -> str:
 
         code = await read_godaddy_code(page)
         print(f"Your GoDaddy 6-digit code is: {code}")
+        return code
+    finally:
+        try:
+            if browser is not None:
+                await browser.disconnect()
+        except Exception:
+            pass
+
+
+async def get_verification_code_with_config(
+    search_query: str = "from:godaddy.com",
+    sender_keyword: str = "godaddy",
+    code_pattern: str = r"(\d{6})",
+) -> str:
+    """
+    Opens Gmail, logs in, searches with the given query,
+    and extracts the verification code using the given pattern.
+    """
+    project_dir = Path(__file__).resolve().parent
+    profile_dir = project_dir / ".chrome-profile-mail"
+    chrome_path = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe")
+    debug_port = 9224
+    profile_dir.mkdir(exist_ok=True)
+    browser = None
+
+    subprocess.Popen(
+        [
+            str(chrome_path),
+            f"--remote-debugging-port={debug_port}",
+            f"--user-data-dir={profile_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "about:blank",
+        ]
+    )
+
+    try:
+        wait_for_debugger(debug_port)
+        browser = await connect(browserURL=f"http://127.0.0.1:{debug_port}")
+        page = await browser.newPage()
+        page.setDefaultNavigationTimeout(90000)
+        await page.setViewport({"width": 1280, "height": 800})
+        await page.goto(LOGIN_URL, {"waitUntil": "networkidle0"})
+        await asyncio.sleep(3)
+        # Wait for email input to appear after redirects
+        email_sel = await wait_for_first_selector(page, EMAIL_SELECTORS, timeout=60000)
+        await asyncio.sleep(2)
+        await fill_field(page, EMAIL_SELECTORS, EMAIL)
+        await asyncio.sleep(2)
+
+        await click_next(page)
+
+        # Wait for password page with retry on context destruction
+        for _ in range(120):
+            try:
+                if page.url.startswith(PASSWORD_URL):
+                    break
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+
+        await asyncio.sleep(3)
+        await page.waitForSelector('input[type="password"]', {"timeout": 60000})
+        await asyncio.sleep(2)
+        await wait_for_visible_selector(page, PASSWORD_SELECTORS, timeout=60000)
+        await fill_field(page, PASSWORD_SELECTORS, PASSWORD)
+        await asyncio.sleep(2)
+        await click_next(page)
+        print(f"  Gmail login successful. Searching: {search_query}")
+        await asyncio.sleep(5)
+
+        code = await read_verification_code(
+            page,
+            search_query=search_query,
+            sender_keyword=sender_keyword,
+            code_pattern=code_pattern,
+        )
+        print(f"  Verification code: {code}")
         return code
     finally:
         try:

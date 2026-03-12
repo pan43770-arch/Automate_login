@@ -26,6 +26,9 @@ DEFAULT_CONFIG = {
     "profile_dir": ".chrome-profile-menu",
     "csv_file": "",
     "use_email_verification": True,
+    "email_search_query": "from:godaddy.com",
+    "email_sender_keyword": "godaddy",
+    "email_code_pattern": r"(\d{6})",
     "fields": [
         {
             "name": "Email",
@@ -202,50 +205,80 @@ def menu_set_browser(cfg: dict):
             pause()
 
 
+def _swap_orders(items, idx_a, idx_b):
+    """Swap the order values of two items."""
+    items[idx_a]["order"], items[idx_b]["order"] = items[idx_b]["order"], items[idx_a]["order"]
+
+
 def menu_fields(cfg: dict):
     while True:
         clear()
         print_header("Configure Fields")
         fields = sorted(cfg["fields"], key=lambda f: f["order"])
 
-        print(f"\n  {'#':<4} {'STATUS':<7} {'FILL ORDER':<12} {'FIELD NAME':<28} {'CSV COLUMN NAME'}")
-        print(f"  {'-'*75}")
+        print(f"\n  {'#':<4} {'STATUS':<10} {'FIELD NAME':<28} {'CSV COLUMN'}")
+        print(f"  {'-'*65}")
         for i, f in enumerate(fields, 1):
             if f["enabled"]:
-                status = " ON  <<<"
+                status = "ON  <<<"
             else:
-                status = " OFF    "
-            print(f"  {i:<4} [{status}]  step {f['order']:<6} {f['name']:<28} \"{f['key']}\"")
+                status = "OFF    "
+            print(f"  {i:<4} [{status}]  {f['name']:<28} \"{f['key']}\"")
 
         # Show active fill order
         active = sorted([f for f in fields if f["enabled"]], key=lambda f: f["order"])
         if active:
             print(f"\n  Fill order: {' → '.join(f['name'] for f in active)}")
             csv_headers = ', '.join(f["key"] for f in active)
-            print(f"\n  Your CSV must have these column headers:")
-            print(f"  {csv_headers}")
+            print(f"\n  CSV columns: {csv_headers}")
         else:
             print("\n  Fill order: (none selected)")
 
-        print("\n  T <#>        — Toggle ON/OFF  (e.g. T 3)")
-        print("  O <#> <pos>  — Change order   (e.g. O 2 1)")
+        print("\n  <#>          — Toggle ON/OFF     (e.g. 3)")
+        print("  U <#>        — Move UP           (e.g. U 3)")
+        print("  D <#>        — Move DOWN         (e.g. D 2)")
+        print("  S <#> <#>    — Swap two items     (e.g. S 1 4)")
         print("  B            — Back")
         choice = input("\n  > ").strip().upper()
 
         if choice == "B":
             break
         parts = choice.split()
-        if parts[0] == "T" and len(parts) == 2 and parts[1].isdigit():
-            idx = int(parts[1]) - 1
+
+        # Toggle: just type the number
+        if len(parts) == 1 and parts[0].isdigit():
+            idx = int(parts[0]) - 1
             if 0 <= idx < len(fields):
                 fields[idx]["enabled"] = not fields[idx]["enabled"]
                 save_config(cfg)
-        elif parts[0] == "O" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+
+        # Move UP
+        elif parts[0] == "U" and len(parts) == 2 and parts[1].isdigit():
             idx = int(parts[1]) - 1
-            new_order = int(parts[2])
-            if 0 <= idx < len(fields):
-                fields[idx]["order"] = new_order
+            if 1 <= idx < len(fields):
+                _swap_orders(fields, idx, idx - 1)
                 save_config(cfg)
+            elif idx == 0:
+                print("  ! Already at the top.")
+                pause()
+
+        # Move DOWN
+        elif parts[0] == "D" and len(parts) == 2 and parts[1].isdigit():
+            idx = int(parts[1]) - 1
+            if 0 <= idx < len(fields) - 1:
+                _swap_orders(fields, idx, idx + 1)
+                save_config(cfg)
+            elif idx == len(fields) - 1:
+                print("  ! Already at the bottom.")
+                pause()
+
+        # Swap two items
+        elif parts[0] == "S" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+            a, b = int(parts[1]) - 1, int(parts[2]) - 1
+            if 0 <= a < len(fields) and 0 <= b < len(fields) and a != b:
+                _swap_orders(fields, a, b)
+                save_config(cfg)
+
         else:
             print("  ! Unknown command.")
             pause()
@@ -257,14 +290,14 @@ def menu_buttons(cfg: dict):
         print_header("Configure Buttons")
         buttons = sorted(cfg["buttons"], key=lambda b: b["order"])
 
-        print(f"\n  {'#':<4} {'STATUS':<7} {'RUN ORDER':<11} {'BUTTON NAME':<28} {'MATCHES TEXT ON PAGE'}")
-        print(f"  {'-'*75}")
+        print(f"\n  {'#':<4} {'STATUS':<10} {'BUTTON NAME':<28} {'MATCHES TEXT ON PAGE'}")
+        print(f"  {'-'*65}")
         for i, b in enumerate(buttons, 1):
             if b["enabled"]:
-                status = " ON  <<<"
+                status = "ON  <<<"
             else:
-                status = " OFF    "
-            print(f"  {i:<4} [{status}]  step {b['order']:<6} {b['name']:<28} \"{b['text']}\"")
+                status = "OFF    "
+            print(f"  {i:<4} [{status}]  {b['name']:<28} \"{b['text']}\"")
 
         # Show active flow summary
         active = sorted([b for b in buttons if b["enabled"]], key=lambda b: b["order"])
@@ -273,25 +306,51 @@ def menu_buttons(cfg: dict):
         else:
             print("\n  Active flow: (none selected)")
 
-        print("\n  T <#>        — Toggle ON/OFF  (e.g. T 2)")
-        print("  O <#> <pos>  — Change order   (e.g. O 3 1)")
+        print("\n  <#>          — Toggle ON/OFF     (e.g. 2)")
+        print("  U <#>        — Move UP           (e.g. U 3)")
+        print("  D <#>        — Move DOWN         (e.g. D 2)")
+        print("  S <#> <#>    — Swap two items     (e.g. S 1 4)")
         print("  B            — Back")
         choice = input("\n  > ").strip().upper()
 
         if choice == "B":
             break
         parts = choice.split()
-        if parts[0] == "T" and len(parts) == 2 and parts[1].isdigit():
-            idx = int(parts[1]) - 1
+
+        # Toggle: just type the number
+        if len(parts) == 1 and parts[0].isdigit():
+            idx = int(parts[0]) - 1
             if 0 <= idx < len(buttons):
                 buttons[idx]["enabled"] = not buttons[idx]["enabled"]
                 save_config(cfg)
-        elif parts[0] == "O" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+
+        # Move UP
+        elif parts[0] == "U" and len(parts) == 2 and parts[1].isdigit():
             idx = int(parts[1]) - 1
-            new_order = int(parts[2])
-            if 0 <= idx < len(buttons):
-                buttons[idx]["order"] = new_order
+            if 1 <= idx < len(buttons):
+                _swap_orders(buttons, idx, idx - 1)
                 save_config(cfg)
+            elif idx == 0:
+                print("  ! Already at the top.")
+                pause()
+
+        # Move DOWN
+        elif parts[0] == "D" and len(parts) == 2 and parts[1].isdigit():
+            idx = int(parts[1]) - 1
+            if 0 <= idx < len(buttons) - 1:
+                _swap_orders(buttons, idx, idx + 1)
+                save_config(cfg)
+            elif idx == len(buttons) - 1:
+                print("  ! Already at the bottom.")
+                pause()
+
+        # Swap two items
+        elif parts[0] == "S" and len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+            a, b = int(parts[1]) - 1, int(parts[2]) - 1
+            if 0 <= a < len(buttons) and 0 <= b < len(buttons) and a != b:
+                _swap_orders(buttons, a, b)
+                save_config(cfg)
+
         else:
             print("  ! Unknown command.")
             pause()
@@ -327,20 +386,92 @@ def menu_csv(cfg: dict):
 
 
 def menu_verification(cfg: dict):
-    clear()
-    print_header("Email Verification")
-    status = "ON" if cfg["use_email_verification"] else "OFF"
-    print(f"\n  Auto-read verification code from Gmail: [{status}]")
-    print("\n  When ON  — after clicking 'Send Verification Code', the")
-    print("             script opens Gmail, finds the code and enters it.")
-    print("  When OFF — script pauses and you enter the code manually.")
-    toggle = input("\n  Toggle? (y/n): ").strip().lower()
-    if toggle == "y":
-        cfg["use_email_verification"] = not cfg["use_email_verification"]
-        save_config(cfg)
-        new_status = "ON" if cfg["use_email_verification"] else "OFF"
-        print(f"  → Email verification is now {new_status}")
-        pause()
+    while True:
+        clear()
+        print_header("Email Verification Settings")
+        status = "ON" if cfg["use_email_verification"] else "OFF"
+        query = cfg.get("email_search_query", "from:godaddy.com")
+        sender = cfg.get("email_sender_keyword", "godaddy")
+        pattern = cfg.get("email_code_pattern", r"(\d{6})")
+
+        print(f"\n  Auto-read from Gmail : [{status}]")
+        print(f"  Gmail search query   : {query}")
+        print(f"  Sender keyword       : {sender}")
+        print(f"  Code regex pattern   : {pattern}")
+
+        print("\n  ── Presets ──────────────────────────────────────")
+        print("  P1  GoDaddy      (from:godaddy.com)")
+        print("  P2  Facebook     (from:facebook.com)")
+        print("  P3  GitHub       (from:github.com)")
+        print("  P4  Google       (from:google.com)")
+        print("  P5  Microsoft    (from:microsoft.com)")
+        print("  P6  Twitter/X    (from:x.com)")
+
+        print("\n  ── Commands ─────────────────────────────────────")
+        print("  T              — Toggle ON/OFF")
+        print("  Q              — Set custom search query")
+        print("  S              — Set custom sender keyword")
+        print("  R              — Set custom code regex pattern")
+        print("  B              — Back")
+
+        choice = input("\n  > ").strip().upper()
+
+        if choice == "B":
+            break
+        elif choice == "T":
+            cfg["use_email_verification"] = not cfg["use_email_verification"]
+            save_config(cfg)
+        elif choice == "P1":
+            cfg["email_search_query"] = "from:godaddy.com"
+            cfg["email_sender_keyword"] = "godaddy"
+            cfg["email_code_pattern"] = r"(\d{6})"
+            save_config(cfg)
+        elif choice == "P2":
+            cfg["email_search_query"] = "from:facebook.com"
+            cfg["email_sender_keyword"] = "facebook"
+            cfg["email_code_pattern"] = r"(\d{6})"
+            save_config(cfg)
+        elif choice == "P3":
+            cfg["email_search_query"] = "from:github.com"
+            cfg["email_sender_keyword"] = "github"
+            cfg["email_code_pattern"] = r"(\d{6})"
+            save_config(cfg)
+        elif choice == "P4":
+            cfg["email_search_query"] = "from:google.com"
+            cfg["email_sender_keyword"] = "google"
+            cfg["email_code_pattern"] = r"(\d{6})"
+            save_config(cfg)
+        elif choice == "P5":
+            cfg["email_search_query"] = "from:microsoft.com"
+            cfg["email_sender_keyword"] = "microsoft"
+            cfg["email_code_pattern"] = r"(\d{6})"
+            save_config(cfg)
+        elif choice == "P6":
+            cfg["email_search_query"] = "from:x.com"
+            cfg["email_sender_keyword"] = "x.com"
+            cfg["email_code_pattern"] = r"(\d{6})"
+            save_config(cfg)
+        elif choice == "Q":
+            val = input("  Search query (e.g. from:github.com): ").strip()
+            if val:
+                cfg["email_search_query"] = val
+                save_config(cfg)
+        elif choice == "S":
+            val = input("  Sender keyword (e.g. github): ").strip()
+            if val:
+                cfg["email_sender_keyword"] = val
+                save_config(cfg)
+        elif choice == "R":
+            print("  Current pattern: " + pattern)
+            print("  Default for 6-digit code: (\\d{6})")
+            print("  For 8-digit code: (\\d{8})")
+            val = input("  New pattern: ").strip()
+            if val:
+                cfg["email_code_pattern"] = val
+                save_config(cfg)
+        else:
+            print("  ! Unknown command.")
+            pause()
 
 
 # ── Browser / page helpers ─────────────────────────────────────────────────────
@@ -770,9 +901,13 @@ async def run_signup(cfg: dict, row: dict):
                     await asyncio.sleep(5)
 
                     if cfg["use_email_verification"]:
-                        from daddy_openmail import get_verification_code
+                        from daddy_openmail import get_verification_code_with_config
                         print("  Fetching verification code from Gmail...")
-                        code = await get_verification_code()
+                        code = await get_verification_code_with_config(
+                            search_query=cfg.get("email_search_query", "from:godaddy.com"),
+                            sender_keyword=cfg.get("email_sender_keyword", "godaddy"),
+                            code_pattern=cfg.get("email_code_pattern", r"(\d{6})"),
+                        )
                         print(f"  Got code: {code}")
                         await page.bringToFront()
                         await asyncio.sleep(2)
@@ -803,6 +938,54 @@ async def run_signup(cfg: dict, row: dict):
                     except Exception:
                         pass  # No navigation happened (e.g. modal popup)
                     await asyncio.sleep(2)
+
+                    # After Submit: fetch verification code, enter it, click Continue
+                    if btn_text == "submit" and cfg.get("use_email_verification"):
+                        print("  Waiting before fetching verification code...")
+                        await asyncio.sleep(5)
+
+                        from daddy_openmail import get_verification_code_with_config
+                        print("  Fetching verification code from Gmail...")
+                        code = await get_verification_code_with_config(
+                            search_query=cfg.get("email_search_query", "from:godaddy.com"),
+                            sender_keyword=cfg.get("email_sender_keyword", "godaddy"),
+                            code_pattern=cfg.get("email_code_pattern", r"(\d{6})"),
+                        )
+                        print(f"  Got code: {code}")
+
+                        # Switch back to signup page
+                        await page.bringToFront()
+                        await asyncio.sleep(3)
+
+                        # Enter code in verification input field
+                        code_selectors = [
+                            'input[name="code"]',
+                            'input[name="verificationCode"]',
+                            'input[name="confirmation_code"]',
+                            'input[id="code"]',
+                            'input[type="number"]',
+                            'input[type="text"]',
+                        ]
+                        code_sel = await wait_for_first_selector(page, code_selectors, timeout=30000)
+                        await page.focus(code_sel)
+                        await asyncio.sleep(1)
+                        await page.type(code_sel, code)
+                        print(f"  Verification code [{code}] entered.")
+                        await asyncio.sleep(3)
+
+                        # Click Continue button
+                        try:
+                            await click_button_by_text(page, "continue", timeout=10000)
+                            print("  Clicked 'Continue'.")
+                            await asyncio.sleep(3)
+                        except Exception:
+                            print("  No 'Continue' button found, trying 'Confirm'...")
+                            try:
+                                await click_button_by_text(page, "confirm", timeout=10000)
+                                print("  Clicked 'Confirm'.")
+                                await asyncio.sleep(3)
+                            except Exception:
+                                print("  No Continue/Confirm button found. You may need to click manually.")
 
         print("\n  ✔ Signup flow complete! Browser stays open. Press Ctrl+C to exit.")
         while True:
@@ -860,7 +1043,12 @@ def show_summary(cfg: dict):
     print(f"\n  URL     : {cfg['url'][:55]}")
     print(f"  Browser : {Path(cfg['browser_path']).name}")
     print(f"  CSV     : {csv_label}")
-    print(f"  Gmail verification: {verif}")
+    print(f"  Email verify: {verif}", end="")
+    if cfg["use_email_verification"]:
+        sender = cfg.get('email_sender_keyword', 'godaddy')
+        print(f"  ({sender})")
+    else:
+        print()
 
     # Combined full execution flow — merge fields + buttons sorted by their order number
     all_steps = []
@@ -885,8 +1073,8 @@ def show_summary(cfg: dict):
             b = s["data"]
             print(f"  Order {s['order']:<4} [CLICK]  {b['name']:<26} text: \"{b['text']}\"")
     print(f"  {'─'*62}")
-    print(f"  To change position: go to menu 3 (Fields) or 4 (Buttons)")
-    print(f"  then type:  O <row#> <new order number>")
+    print(f"  To change position: menu 3 (Fields) or 4 (Buttons)")
+    print(f"  U <#> = move up, D <#> = move down, S <#> <#> = swap")
 
 
 def main():
