@@ -8,6 +8,7 @@ import pyautogui
 from pyppeteer import connect
 
 PICTURES_DIR = Path(r"C:\Users\hak\Pictures\profile picture")
+COVERS_DIR = Path(r"C:\Users\hak\Pictures\cover profile")
 FACEBOOK_URL = "https://www.facebook.com/"
 
 
@@ -192,6 +193,116 @@ async def change_profile_picture(page, picture_num: int) -> None:
         print(f"    Profile picture updated!")
     else:
         print(f"    ! Could not find 'Save' button")
+
+    # ---- COVER PHOTO ----
+    await asyncio.sleep(3)
+    await upload_cover_photo(page, picture_num)
+
+
+async def upload_cover_photo(page, picture_num: int) -> None:
+    """Upload cover photo from C:\\Users\\hak\\Pictures\\cover profile."""
+    print(f"\n    --- Cover Photo ---")
+
+    # Find cover photo file (try numbered first, then any available)
+    cover_path = None
+    for ext in ["jpg", "png", "avif", "jpeg", "webp"]:
+        candidate = COVERS_DIR / f"{picture_num}.{ext}"
+        if candidate.exists():
+            cover_path = candidate
+            break
+
+    # Fallback: pick any available cover photo
+    if not cover_path:
+        all_covers = sorted(COVERS_DIR.glob("*.*"))
+        all_covers = [f for f in all_covers if f.suffix.lower() in (".jpg", ".png", ".avif", ".jpeg", ".webp")]
+        if all_covers:
+            # Use round-robin: pick by index
+            cover_path = all_covers[(picture_num - 1) % len(all_covers)]
+
+    if not cover_path:
+        print(f"    ! No cover photo found in {COVERS_DIR}")
+        return
+
+    print(f"    Using cover: {cover_path.name}")
+
+    # Step 1: Click "Upload photo" for cover (on profile page)
+    print(f"    Clicking 'Upload photo' for cover...")
+    # Look for the cover photo area - click on the cover change div
+    found = await page.evaluate("""() => {
+        // Find the cover photo overlay div
+        const divs = document.querySelectorAll('div[role="none"][data-visualcompletion="ignore"]');
+        for (const div of divs) {
+            const style = div.getAttribute('style') || '';
+            if (style.includes('inset: 0px') || style.includes('inset:0px')) {
+                const rect = div.getBoundingClientRect();
+                if (rect.width > 200 && rect.height > 100) {
+                    div.click();
+                    return true;
+                }
+            }
+        }
+        return false;
+    }""")
+
+    if not found:
+        print(f"    ! Could not find cover photo area, trying alternative...")
+        # Try clicking "Edit cover photo" or similar text
+        await click_span_text(page, "Edit cover photo", timeout=5)
+
+    await asyncio.sleep(3)
+
+    # Step 2: Click "Upload photo" option
+    print(f"    Clicking 'Upload Photo'...")
+    if not await click_span_text(page, "Upload Photo", timeout=10):
+        # Also try "Upload photo" variant
+        if not await click_span_text(page, "Upload photo", timeout=5):
+            print(f"    ! Could not find 'Upload Photo' for cover")
+            return
+
+    await asyncio.sleep(3)
+
+    # Step 3: Windows file dialog - type path and select cover file
+    print(f"    File dialog opened, typing cover path...")
+    await asyncio.sleep(2)
+
+    pyautogui.hotkey("alt", "d")  # Focus address bar
+    await asyncio.sleep(1)
+    pyautogui.typewrite(str(COVERS_DIR), interval=0.02)
+    await asyncio.sleep(1)
+    pyautogui.press("enter")  # Navigate to folder
+    await asyncio.sleep(2)
+
+    # Type the filename
+    print(f"    Selecting {cover_path.name}...")
+    pyautogui.hotkey("alt", "n")  # Focus filename field
+    await asyncio.sleep(1)
+    pyautogui.typewrite(cover_path.name, interval=0.02)
+    await asyncio.sleep(1)
+    pyautogui.press("enter")  # Open the file
+    await asyncio.sleep(5)
+
+    print(f"    Cover photo uploaded: {cover_path.name}")
+
+    # Step 4: Click "Save changes" - focus button and press Enter
+    print(f"    Clicking 'Save changes'...")
+    await asyncio.sleep(2)
+
+    found = await page.evaluate("""() => {
+        const btn = document.querySelector('div[aria-label="Save changes"][role="button"][tabindex="0"]');
+        if (btn) {
+            btn.focus();
+            return true;
+        }
+        return false;
+    }""")
+
+    if found:
+        await asyncio.sleep(0.5)
+        await page.keyboard.press('Enter')
+        await asyncio.sleep(5)
+        print(f"    Cover photo updated!")
+    else:
+        print(f"    ! Could not find 'Save changes' button")
 
 
 async def main() -> None:
